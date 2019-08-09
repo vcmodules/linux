@@ -11,11 +11,34 @@
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/sched/signal.h>
+#include <soc/bcm2835/raspberrypi-firmware.h>
 
 #include "uapi/drm/v3d_drm.h"
 #include "v3d_drv.h"
 #include "v3d_regs.h"
 #include "v3d_trace.h"
+
+#define VCMSG_ID_V3D_CLOCK 0x000000005                /* Clock/Voltage ID's */
+
+static int bcm2835_cpufreq_clock_property(u32 tag, u32 id, u32 *val)
+{
+	struct rpi_firmware *fw = rpi_firmware_get(NULL);
+	struct {
+		u32 id;
+		u32 val;
+	} packet;
+	int ret;
+
+	packet.id = id;
+	packet.val = *val;
+	ret = rpi_firmware_property(fw, tag, &packet, sizeof(packet));
+	if (ret)
+		return ret;
+
+	*val = packet.val;
+
+	return 0;
+}
 
 static void
 v3d_clock_down_work(struct work_struct *work)
@@ -23,8 +46,8 @@ v3d_clock_down_work(struct work_struct *work)
 	struct v3d_dev *v3d =
 		container_of(work, struct v3d_dev, clk_down_work.work);
 	int ret;
-
-	ret = clk_set_rate(v3d->clk, v3d->clk_down_rate);
+	u32 rate = v3d->clk_down_rate;
+	ret = bcm2835_cpufreq_clock_property(RPI_FIRMWARE_SET_CLOCK_RATE, VCMSG_ID_V3D_CLOCK, &rate);
 	v3d->clk_up = false;
 	WARN_ON_ONCE(ret != 0);
 }
@@ -37,8 +60,8 @@ v3d_clock_up_get(struct v3d_dev *v3d)
 		cancel_delayed_work_sync(&v3d->clk_down_work);
 		if (!v3d->clk_up)  {
 			int ret;
-
-			ret = clk_set_rate(v3d->clk, v3d->clk_up_rate);
+			u32 rate = v3d->clk_up_rate;
+			ret = bcm2835_cpufreq_clock_property(RPI_FIRMWARE_SET_CLOCK_RATE, VCMSG_ID_V3D_CLOCK, &rate);
 			WARN_ON_ONCE(ret != 0);
 			v3d->clk_up = true;
 		}
