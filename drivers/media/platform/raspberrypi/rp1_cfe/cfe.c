@@ -313,6 +313,8 @@ struct cfe_device {
 	struct pisp_fe_device fe;
 
 	int fe_csi2_channel;
+
+	struct v4l2_ctrl_handler ctrl_handler;
 };
 
 static inline bool is_fe_enabled(struct cfe_device *cfe)
@@ -2208,6 +2210,10 @@ static int cfe_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, cfe);
 
+	ret = v4l2_ctrl_handler_init(&cfe->ctrl_handler, 0);
+	if (ret)
+		goto err_init_ctrls;
+
 	kref_init(&cfe->kref);
 	cfe->pdev = pdev;
 	cfe->fe_csi2_channel = -1;
@@ -2278,6 +2284,8 @@ static int cfe_probe(struct platform_device *pdev)
 
 	cfe->v4l2_dev.mdev = &cfe->mdev;
 
+	cfe->v4l2_dev.ctrl_handler = &cfe->ctrl_handler;
+
 	ret = v4l2_device_register(&pdev->dev, &cfe->v4l2_dev);
 	if (ret) {
 		cfe_err("Unable to register v4l2 device.\n");
@@ -2343,6 +2351,8 @@ err_runtime_disable:
 	v4l2_device_unregister(&cfe->v4l2_dev);
 err_cfe_put:
 	cfe_put(cfe);
+err_init_ctrls:
+	v4l2_ctrl_handler_free(&cfe->ctrl_handler);
 
 	return ret;
 }
@@ -2365,6 +2375,8 @@ static int cfe_remove(struct platform_device *pdev)
 	v4l2_device_unregister(&cfe->v4l2_dev);
 
 	cfe_put(cfe);
+
+	v4l2_ctrl_handler_free(&cfe->ctrl_handler);
 
 	return 0;
 }
